@@ -175,10 +175,10 @@ class ChartBuilder(object):
         # [process_chart(x, is_dependency=True) for x in chart.dependencies]
         dependencies = []
 
-        for chart in self.chart.dependencies:
-            LOG.info("Building dependency chart %s for release %s", chart.name,
-                     self.chart.release_name)
-            dependencies.append(ChartBuilder(chart).get_helm_chart())
+        for dep in self.chart.dependencies:
+            LOG.info("Building dependency chart %s for release %s", self.chart.name,
+                     self.chart.release)
+            dependencies.append(ChartBuilder(dep.chart).get_helm_chart())
 
         helm_chart = Chart(
             metadata=self.get_metadata(),

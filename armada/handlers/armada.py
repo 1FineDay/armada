@@ -21,9 +21,11 @@ from supermutes.dot import dotify
 
 from chartbuilder import ChartBuilder
 from tiller import Tiller
+from manifest import Manifest
 from ..utils.release import release_prefix
 from ..utils import git
 from ..utils import lint
+from ..const import KEYWORD_ARMADA, KEYWORD_GROUPS, KEYWORD_CHARTS, KEYWORD_PREFIX
 
 LOG = logging.getLogger(__name__)
 
@@ -39,31 +41,32 @@ class Armada(object):
     workflows
     '''
 
-    def __init__(self, config,
-                 disable_update_pre=False,
-                 disable_update_post=False,
-                 enable_chart_cleanup=False,
-                 dry_run=False,
-                 wait=False,
-                 timeout=DEFAULT_TIMEOUT,
+    def __init__(self, file, disable_update_pre=False,
+                 disable_update_post=False, enable_chart_cleanup=False,
+                 dry_run=False, wait=False, timeout=DEFAULT_TIMEOUT,
                  debug=False):
         '''
         Initialize the Armada Engine and establish
         a connection to Tiller
         '''
+
         self.disable_update_pre = disable_update_pre
         self.disable_update_post = disable_update_post
         self.enable_chart_cleanup = enable_chart_cleanup
         self.dry_run = dry_run
         self.wait = wait
         self.timeout = timeout
-        self.config = yaml.load(config)
+        self.documents = yaml.safe_load_all(file)
+        self.config = self.get_armada_manifest()
         self.tiller = Tiller()
         self.debug = debug
 
         # Set debug value
         CONF.set_default('debug', self.debug)
         logging.setup(CONF, DOMAIN)
+
+    def get_armada_manifest(self):
+        return Manifest(self.documents).get_manifest()
 
     def find_release_chart(self, known_releases, name):
         '''
@@ -77,49 +80,60 @@ class Armada(object):
         '''
         Perform a series of checks and operations to ensure proper deployment
         '''
+
         # Ensure tiller is available and yaml is valid
         if not self.tiller.tiller_status():
-            raise Exception("Tiller Services is not Available")
-        if not lint.valid_manifest(self.config):
+            raise Exception("Service: Tiller is not Available")
+        if not lint.validate_armada_documents(self.documents):
             raise Exception("Invalid Armada Manifest")
+        if not lint.validate_armada_object(self.config):
+            raise Exception("Invalid Armada Object")
 
         # Clone the chart sources
         #
         # We only support a git source type right now, which can also
         # handle git:// local paths as well
         repos = {}
-        for group in self.config.get('armada').get('charts'):
-            for ch in group.get('chart_group'):
-                location = ch.get('chart').get('source').get('location')
-                ct_type = ch.get('chart').get('source').get('type')
-                reference = ch.get('chart').get('source').get('reference')
-                subpath = ch.get('chart').get('source').get('subpath')
+        for group in self.config.get(KEYWORD_ARMADA).get(KEYWORD_GROUPS):
+            for ch in group.get(KEYWORD_CHARTS):
+                self.tag_cloned_repo(ch, repos)
 
-                if ct_type == 'local':
-                    ch.get('chart')['source_dir'] = (location, subpath)
-                elif ct_type == 'git':
-                    if location not in repos.keys():
-                        try:
-                            LOG.info('Cloning repo: %s', location)
-                            repo_dir = git.git_clone(location, reference)
-                        except Exception as e:
-                            raise ValueError(e)
-                        repos[location] = repo_dir
-                        ch.get('chart')['source_dir'] = (repo_dir, subpath)
-                    else:
-                        ch.get('chart')['source_dir'] = (repos.get(location),
-                                                         subpath)
-                else:
-                    raise Exception("Unknown source type %s for chart %s",
-                                    ct_type, ch.get('chart').get('name'))
+                for dep in ch.get('chart').get('dependencies'):
+                    self.tag_cloned_repo(dep, repos)
+
+    def tag_cloned_repo(self, ch, repos):
+        location = ch.get('chart').get('source').get('location')
+        ct_type = ch.get('chart').get('source').get('type')
+        reference = ch.get('chart').get('source').get('reference')
+        subpath = ch.get('chart').get('source').get('subpath')
+
+        if ct_type == 'local':
+            ch.get('chart')['source_dir'] = (location, subpath)
+        elif ct_type == 'git':
+            if location not in repos.keys():
+                try:
+                    LOG.info('Cloning repo: %s', location)
+                    repo_dir = git.git_clone(location, reference)
+                except Exception as e:
+                    raise ValueError(e)
+                repos[location] = repo_dir
+                ch.get('chart')['source_dir'] = (repo_dir, subpath)
+            else:
+                ch.get('chart')['source_dir'] = (repos.get(location),
+                                                 subpath)
+        else:
+            raise Exception("Unknown source type %s for chart %s",
+                            ct_type, ch.get('chart').get('name'))
+
+
 
     def post_flight_ops(self):
         '''
         Operations to run after deployment process has terminated
         '''
         # Delete git repos cloned for deployment
-        for group in self.config.get('armada').get('charts'):
-            for ch in group.get('chart_group'):
+        for group in self.config.get(KEYWORD_ARMADA).get(KEYWORD_GROUPS):
+            for ch in group.get(KEYWORD_CHARTS):
                 if ch.get('chart').get('source').get('type') == 'git':
                     git.source_cleanup(ch.get('chart').get('source_dir')[0])
 
@@ -135,16 +149,16 @@ class Armada(object):
         self.pre_flight_ops()
 
         known_releases = self.tiller.list_charts()
-        prefix = self.config.get('armada').get('release_prefix')
+        prefix = self.config.get(KEYWORD_ARMADA).get(KEYWORD_PREFIX)
 
         for release in known_releases:
             LOG.debug("Release %s, Version %s found on tiller", release[0],
                       release[1])
 
-        for entry in self.config['armada']['charts']:
+        for entry in self.config[KEYWORD_ARMADA][KEYWORD_GROUPS]:
             chart_wait = self.wait
             desc = entry.get('description', 'A Chart Group')
-            chart_group = entry.get('chart_group', [])
+            chart_group = entry.get(KEYWORD_CHARTS, [])
 
             if entry.get('sequenced', False):
                 chart_wait = True
@@ -156,9 +170,9 @@ class Armada(object):
                 values = gchart.get('chart').get('values', {})
                 pre_actions = {}
                 post_actions = {}
-                LOG.info('%s', chart.release_name)
+                LOG.info('%s', chart.release)
 
-                if chart.release_name is None:
+                if chart.release is None:
                     continue
 
                 # retrieve appropriate timeout value if 'wait' is specified
@@ -172,14 +186,14 @@ class Armada(object):
                 protoc_chart = chartbuilder.get_helm_chart()
 
                 # determine install or upgrade by examining known releases
-                LOG.debug("RELEASE: %s", chart.release_name)
+                LOG.debug("RELEASE: %s", chart.release)
                 deployed_releases = [x[0] for x in known_releases]
-                prefix_chart = release_prefix(prefix, chart.release_name)
+                prefix_chart = release_prefix(prefix, chart.release)
 
                 if prefix_chart in deployed_releases:
 
                     # indicate to the end user what path we are taking
-                    LOG.info("Upgrading release %s", chart.release_name)
+                    LOG.info("Upgrading release %s", chart.release)
                     # extract the installed chart and installed values from the
                     # latest release so we can compare to the intended state
                     LOG.info("Checking Pre/Post Actions")
@@ -214,7 +228,7 @@ class Armada(object):
                     # do actual update
                     self.tiller.update_release(protoc_chart,
                                                self.dry_run,
-                                               chart.release_name,
+                                               chart.release,
                                                chart.namespace,
                                                prefix, pre_actions,
                                                post_actions,
@@ -226,10 +240,10 @@ class Armada(object):
 
                 # process install
                 else:
-                    LOG.info("Installing release %s", chart.release_name)
+                    LOG.info("Installing release %s", chart.release)
                     self.tiller.install_release(protoc_chart,
                                                 self.dry_run,
-                                                chart.release_name,
+                                                chart.release,
                                                 chart.namespace,
                                                 prefix,
                                                 values=yaml.safe_dump(values),
@@ -243,7 +257,7 @@ class Armada(object):
         self.post_flight_ops()
 
         if self.enable_chart_cleanup:
-            self.tiller.chart_cleanup(prefix, self.config['armada']['charts'])
+            self.tiller.chart_cleanup(prefix, self.config[KEYWORD_ARMADA][KEYWORD_GROUPS])
 
     def show_diff(self, chart, installed_chart,
                   installed_values, target_chart, target_values):
@@ -259,7 +273,7 @@ class Armada(object):
                                                .split('\n'),
                                                target_chart.split('\n')))
         if len(chart_diff) > 0:
-            LOG.info("Chart Unified Diff (%s)", chart.release_name)
+            LOG.info("Chart Unified Diff (%s)", chart.release)
             for line in chart_diff:
                 LOG.debug(line)
         values_diff = list(difflib.unified_diff(installed_values.split('\n'),
@@ -267,7 +281,7 @@ class Armada(object):
                                                 .safe_dump(target_values)
                                                 .split('\n')))
         if len(values_diff) > 0:
-            LOG.info("Values Unified Diff (%s)", chart.release_name)
+            LOG.info("Values Unified Diff (%s)", chart.release)
             for line in values_diff:
                 LOG.debug(line)
 
