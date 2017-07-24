@@ -21,6 +21,11 @@ from supermutes.dot import dotify
 
 from chartbuilder import ChartBuilder
 from tiller import Tiller
+
+from ..exceptions import armada_exceptions
+from ..exceptions import git_exceptions
+from ..exceptions import lint_exceptions
+from ..exceptions import tiller_exceptions
 from ..utils.release import release_prefix
 from ..utils import git
 from ..utils import lint
@@ -70,7 +75,7 @@ class Armada(object):
         Find a release given a list of known_releases and a release name
         '''
         for chart_name, _, chart, values in known_releases:
-            if chart_name == name:
+	    if chart_name == name:
                 return chart, values
 
     def pre_flight_ops(self):
@@ -79,9 +84,10 @@ class Armada(object):
         '''
         # Ensure tiller is available and yaml is valid
         if not self.tiller.tiller_status():
-            raise Exception("Tiller Services is not Available")
+	    raise tiller_exceptions.TillerServicesUnavailableException()
+        
         if not lint.valid_manifest(self.config):
-            raise Exception("Invalid Armada Manifest")
+	    raise lint_exceptions.InvalidManifestException()
 
         # Clone the chart sources
         #
@@ -103,15 +109,14 @@ class Armada(object):
                             LOG.info('Cloning repo: %s', location)
                             repo_dir = git.git_clone(location, reference)
                         except Exception as e:
-                            raise ValueError(e)
-                        repos[location] = repo_dir
+                            raise git_exceptions.GitLocationException(location)
+			repos[location] = repo_dir
                         ch.get('chart')['source_dir'] = (repo_dir, subpath)
                     else:
                         ch.get('chart')['source_dir'] = (repos.get(location),
                                                          subpath)
                 else:
-                    raise Exception("Unknown source type %s for chart %s",
-                                    ct_type, ch.get('chart').get('name'))
+                    raise armada_exceptions.UnknownChartSourceException(ct_type, ch.get('chart').get('name'))
 
     def post_flight_ops(self):
         '''

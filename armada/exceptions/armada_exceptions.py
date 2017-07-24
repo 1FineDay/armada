@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from oslo_config import cfg
-from oslo_log import log as logging
+import exception_client
 
 class ArmadaException(exception_client.ExceptionClient):
     '''Base class for Armada handler exception and error handling.'''
@@ -31,3 +30,11 @@ class UnknownChartSourceException(exception_client.ExceptionClient):
                         chart \"' + self._chart_name + '\"'
 
         super(UnknownChartSourceException, self).__init__(self._message)
+
+class PreFlightCheckException(exception_client.ExceptionClient):
+	'''Generic Exception that occurs during Pre-Flight checks'''
+	
+class PostFlightOpsException(exception_client.ExceptionClient):
+	'''Generic exception that occurs during the post-flight operations'''
+
+	message = 'An error occured during the post flight operations.'	

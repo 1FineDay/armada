@@ -1,4 +1,4 @@
-# Copyright 2017 The Armada Authors.
+#Copyright 2017 The Armada Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,20 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from oslo_config import cfg
-from oslo_log import log as logging
+import exception_client
 
-LOG = logging.getLogger(__name__)
+class KubernetesException(exception_client.ExceptionClient):
+    '''Base class for the k8s handler exception and error handling.'''
 
-DEFAULT_TIMEOUT = 3600
-CONF = cfg.CONF
-DOMAIN = "armada"
+    message = 'An unknown Kubernetes handler error occured.'
 
-logging.setup(CONF, DOMAIN)
+class KubeConfigException(exception_client.ExceptionClient):
+    '''Exception that occurs when there is an error loading the Kube config file.'''
+	
 
-class ExceptionClient(Exception):
-    '''Base class for Armada exception and error handling.'''
-
-    def __init__(self, message=None):
-        self.message = message or self.message	
-        super(ExceptionClient, self).__init__(self.message)
+	message  = 'There was an error loading the Kubernetes config file.'

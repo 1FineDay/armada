@@ -12,15 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from oslo_config import cfg
-from oslo_log import log as logging
+import exception_client
 
 class LintException(exception_client.ExceptionClient):
     '''Base class for linting exceptions and errors.'''
 
     message = 'An unknown linting error occured.'
 
-class InvalidManifestException(exception_client.ExceptionClient):
+class InvalidManifestException(LintException):
     '''Exception for invalid manifests.'''
 
     message = 'Armada manifest invalid.'
+
+class InvalidChartNameException(LintException):
+    '''Exception that occurs when an invalid filename is encountered.'''
+
+    message = 'Chart name must be a string,'
+
+class InvalidChartDefinitionException(LintException):
+    '''Exception that occurs when an invalid chart definition is encountered.'''
+    
+    message = 'Invalid chart definition.Chart definition must be array.'
+
+class InvalidReleaseException(LintException):
+    '''Exception that occurs when a release is invalid.'''
+    
+    message = 'Release needs to be a string.'
+
+class InvalidArmadaObjectException(LintException):
+    '''Exception that occurs when an Armada object is not declared.'''
+
+    message = 'An Armada object was not declared.'

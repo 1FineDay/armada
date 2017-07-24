@@ -12,20 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from oslo_config import cfg
-from oslo_log import log as logging
+import exception_client
 
-LOG = logging.getLogger(__name__)
+class GitException(exception_client.ExceptionClient):
+    '''Base class for Git exceptions and error handling.'''
 
-DEFAULT_TIMEOUT = 3600
-CONF = cfg.CONF
-DOMAIN = "armada"
+    message = 'An unknown error occured while cloning a Git repository.'
 
-logging.setup(CONF, DOMAIN)
+class GitLocationException(GitException):
+    '''Exception that occurs when an error occurs cloning a Git repository.'''
 
-class ExceptionClient(Exception):
-    '''Base class for Armada exception and error handling.'''
+    def __init__(self, location):
+        self._location = location
+	self._message = self._location + ' is not a valid git repository.'
 
-    def __init__(self, message=None):
-        self.message = message or self.message	
-        super(ExceptionClient, self).__init__(self.message)
+        super(GitLocationException, self).__init__(self._message)
+
