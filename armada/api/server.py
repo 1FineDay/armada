@@ -20,6 +20,7 @@ default.register_opts()
 
 from armada_controller import Apply
 from tiller_controller import Release, Status
+from validate_controller import Validate
 
 from middleware import AuthMiddleware, RoleMiddleware
 
@@ -34,7 +35,6 @@ DOMAIN = "armada"
 
 logging.setup(CONF, DOMAIN)
 
-# Build API
 def create(middleware=CONF.middleware):
     if middleware:
         api = falcon.API(middleware=[AuthMiddleware(), RoleMiddleware()])
@@ -42,13 +42,14 @@ def create(middleware=CONF.middleware):
         api = falcon.API()
 
     # Configure API routing
-    url_routes = (
-        ('/tiller/status', Status()),
-        ('/tiller/releases', Release()),
-        ('/armada/apply/', Apply())
+    url_routes_v1 = (
+        ('/service/status', Status()),
+        ('/service/releases', Release()),
+        ('/apply', Apply()),
+        ('/validate', Validate())
     )
 
-    for route, service in url_routes:
+    for route, service in url_routes_v1:
         api.add_route(route, service)
 
     return api

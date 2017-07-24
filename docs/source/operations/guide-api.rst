@@ -6,7 +6,7 @@ Armada Endpoints
 
 .. http:post:: /armada/apply
 
-    :string file The yaml file to apply
+    :string file   armada manifest
     :>json boolean debug Enable debug logging
     :>json boolean disable_update_pre
     :>json boolean disable_update_post
@@ -21,7 +21,7 @@ Armada Endpoints
     .. sourcecode:: js
 
         {
-        	"file": "examples/openstack-helm.yaml",
+        	"file": "<manifest-payload>",
         	"options": {
         		"debug": true,
         		"disable_update_pre": false,
@@ -39,7 +39,7 @@ Armada Endpoints
     .. sourcecode:: js
 
         {
-            "message": "success"
+            "success": True
         }
 
 Tiller Endpoints
@@ -55,11 +55,11 @@ Tiller Endpoints
 
     {
         "releases": {
-            "armada-memcached": "openstack",
-            "armada-etcd": "openstack",
-            "armada-keystone": "openstack",
-            "armada-rabbitmq": "openstack",
-            "armada-horizon": "openstack"
+            "<namespace-name>": [
+                "armada-memcached",
+                "armada-etcd",
+                "armada-rabbitmq",
+            ]
         }
     }
 

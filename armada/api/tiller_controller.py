@@ -13,53 +13,59 @@
 # limitations under the License.
 #
 
-from armada.conf import default
-
 import json
-from falcon import HTTP_200
+from falcon import HTTP_200, HTTP_404
 
-from oslo_config import cfg
-from oslo_log import log as logging
+from armada import api
+from armada.handlers.tiller import Tiller
 
-# Required Oslo configuration setup
-default.register_opts()
-
-from armada.handlers.tiller import Tiller as tillerHandler
-
-LOG = logging.getLogger(__name__)
-CONF = cfg.CONF
-DOMAIN = "armada"
-
-logging.setup(CONF, DOMAIN)
-
-class Status(object):
+class Status(api.BaseResource):
     def on_get(self, req, resp):
         '''
         get tiller status
         '''
-        message = "Tiller Server is {}"
-        if tillerHandler().tiller_status():
-            resp.data = json.dumps({'message': message.format('Active')})
-            LOG.info('Tiller Server is Active.')
-        else:
-            resp.data = json.dumps({'message': message.format('Not Present')})
-            LOG.info('Tiller Server is Not Present.')
+        try:
+            message = {
+                'tiller': Tiller().tiller_status()
+            }
 
-        resp.content_type = 'application/json'
-        resp.status = HTTP_200
+            if message.get('tiller'):
+                resp.data = json.dumps(message)
+                resp.status = HTTP_200
+            else:
+                resp.data = json.dumps(message)
+                resp.status = HTTP_404
 
-class Release(object):
+            resp.content_type = 'application/json'
+        except Exception:
+            self.error(req.contex, "Unable to find resources")
+            self.return_error(
+                resp,
+                HTTP_404,
+                message="Unable to find resources"
+            )
+
+
+class Release(api.BaseResource):
     def on_get(self, req, resp):
         '''
         get tiller releases
         '''
-        # Get tiller releases
-        handler = tillerHandler()
 
-        releases = {}
-        for release in handler.list_releases():
-            releases[release.name] = release.namespace
+        try:
+            # Get tiller releases
+            handler = Tiller()
+            releases = {}
+            for release in handler.list_releases():
+                releases[release.name] = release.namespace
 
-        resp.data = json.dumps({'releases': releases})
-        resp.content_type = 'application/json'
-        resp.status = HTTP_200
+            resp.data = json.dumps({'releases': releases})
+            resp.content_type = 'application/json'
+            resp.status = HTTP_200
+        except Exception:
+            self.error(req.contex, "Unable to find Armada Releases")
+            self.return_error(
+                resp,
+                HTTP_404,
+                message='Unable to find Armada Releases'
+            )

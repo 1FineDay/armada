@@ -17,36 +17,29 @@ import json
 from falcon import HTTP_200, HTTP_404
 
 from armada import api
-from armada.handlers.armada import Armada
+from armada.utils.lint import validate_manifest
 
-
-class Apply(api.BaseResource):
+class Validate(api.BaseResource):
     '''
     apply armada endpoint service
     '''
 
     def on_post(self, req, resp):
-
         try:
-            data = self.req_json(req)
-            opts = data['options']
-            armada = Armada(
-                open(data),
-                disable_update_pre=opts.get('disable_update_pre', False),
-                disable_update_post=opts.get('disable_update_post', False),
-                enable_chart_cleanup=opts.get('enable_chart_cleanup', False),
-                dry_run=opts.get('dry_run', False),
-                wait=opts.get('wait', False),
-            )
+            message = {
+                'valid': validate_manifest(open(self.req_json(req)))
+            }
 
-            armada.sync()
+            if message.get('valid'):
+                resp.data = json.dumps(message)
+                resp.status = HTTP_200
 
-            resp.data = json.dumps({'success': True})
             resp.content_type = 'application/json'
-            resp.status = HTTP_200
 
         except Exception:
-            self.error(req.contex, "Failed to apply manifest")
+            self.error(req.contex, "Failed: Invalid Armada Manifest")
             self.return_error(
                 resp,
-                HTTP_404, message="Failed to apply manifest", retry=False)
+                HTTP_404,
+                message="Failed: Invalid Armada Manifest"
+            )
